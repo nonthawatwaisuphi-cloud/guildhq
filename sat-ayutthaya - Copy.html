@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบนำทาง รพ.พระนครศรีอยุธยา (แผนผังแยกชั้น + เสียงสมูท + สแกน QR)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .pulse-marker {
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            transform-origin: center;
+        }
+        @keyframes pulse-ring {
+            0% { r: 7; opacity: 0.9; }
+            100% { r: 24; opacity: 0; }
+        }
+        .speaking-glow {
+            box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.45);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-3 md:p-6">
+
+    <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative">
+        
+        <!-- Header -->
+        <div class="bg-emerald-800 text-white p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="bg-amber-400 text-emerald-950 text-xs font-extrabold px-2.5 py-0.5 rounded-full">MULTI-FLOOR MAP + QR</span>
+                    <span class="text-emerald-200 text-xs">โรงพยาบาลพระนครศรีอยุธยา</span>
+                </div>
+                <h1 class="text-xl md:text-2xl font-bold mt-1">🔊 ระบบนำทางแผนผังแยกชั้น (ตึกเฉลิมพระเกียรติฯ & โรจนะ)</h1>
+            </div>
+
+            <!-- แผงควบคุม (ปุ่มสแกน QR และเซนเซอร์) -->
+            <div class="flex flex-wrap items-center gap-2 bg-emerald-950/60 p-2 rounded-xl border border-emerald-700 w-full xl:w-auto">
+                <button onclick="openQRModal()" class="bg-indigo-500 hover:bg-indigo-400 text-white font-bold px-3.5 py-2 rounded-lg text-xs md:text-sm transition shadow flex items-center gap-1.5 border border-indigo-300">
+                    📷 สแกน QR อัปเดตพิกัด
+                </button>
+                <button onclick="toggleVoice()" id="voiceToggleBtn" class="bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-3.5 py-2 rounded-lg text-xs md:text-sm transition shadow flex items-center gap-1.5">
+                    <span id="voiceIcon">🔊</span> <span id="voiceStatusText">เปิดเสียงอยู่</span>
+                </button>
+                <button onclick="simulateSteps(5)" class="bg-rose-500 hover:bg-rose-400 text-white font-bold px-3 py-2 rounded-lg text-xs md:text-sm transition shadow">
+                    👟 จำลองเดิน (+5)
+                </button>
+                <button onclick="enableMotionSensor()" id="sensorBtn" class="bg-amber-400 hover:bg-amber-300 text-emerald-950 font-bold px-3 py-2 rounded-lg text-xs md:text-sm transition shadow hidden sm:block">
+                    📱 เปิดเซนเซอร์
+                </button>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- คอลัมน์ซ้าย: การควบคุม -->
+            <div class="lg:col-span-4 xl:col-span-3 space-y-4">
+                
+                <!-- กล่องเลือกจุดเริ่มต้นและปลายทาง -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4 shadow-sm">
+                    <label class="block text-slate-800 font-bold text-base border-b border-slate-300 pb-2">📍 ระบุจุดเริ่มต้นและปลายทาง</label>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 block mb-1">ตำแหน่งปัจจุบัน (Start)</label>
+                            <select id="startNode" onchange="loadCustomRoute()" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <optgroup label="จุดเริ่มต้น / ภายนอก">
+                                    <option value="GATE">ประตูทางเข้าหลัก (ถนนอู่ทอง)</option>
+                                </optgroup>
+                                <optgroup label="อาคารเฉลิมพระเกียรติฯ">
+                                    <option value="CHALERM_1">จุดคัดกรอง / เวชระเบียน (ชั้น 1)</option>
+                                    <option value="LIFT_C1">โถงลิฟต์หลัก (ชั้น 1)</option>
+                                    <option value="LIFT_C2">โถงลิฟต์หลัก (ชั้น 2)</option>
+                                    <option value="CHALERM_2">ห้องตรวจ OPD / รับยา (ชั้น 2)</option>
+                                </optgroup>
+                                <optgroup label="ทางเชื่อมและอาคารโรจนะ">
+                                    <option value="WALKWAY">ทางเชื่อมอาคาร (ชั้น 1)</option>
+                                    <option value="ROJANA_1">ห้องตรวจสอบสิทธิ์ (ตึกโรจนะ ชั้น 1)</option>
+                                    <option value="LIFT_R1">โถงลิฟต์ตึกโรจนะ (ชั้น 1)</option>
+                                    <option value="LIFT_R2">โถงลิฟต์ตึกโรจนะ (ชั้น 2)</option>
+                                    <option value="ROJANA_2">คลินิกผู้สูงอายุ / อาชีวเวชกรรม (ตึกโรจนะ ชั้น 2)</option>
+                                </optgroup>
+                                <optgroup label="อาคารเฉพาะทาง">
+                                    <option value="SRISURIYOTHAI">ตึกศรีสุริโยทัย (สูติ-นรีเวชกรรม)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 block mb-1">จุดหมายปลายทาง (Destination)</label>
+                            <select id="endNode" onchange="loadCustomRoute()" class="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-sm font-bold text-emerald-900 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+                                <optgroup label="อาคารเฉลิมพระเกียรติฯ">
+                                    <option value="CHALERM_1">จุดคัดกรอง / เวชระเบียน (ชั้น 1)</option>
+                                    <option value="LIFT_C1">โถงลิฟต์หลัก (ชั้น 1)</option>
+                                    <option value="LIFT_C2">โถงลิฟต์หลัก (ชั้น 2)</option>
+                                    <option value="CHALERM_2" selected>ห้องตรวจ OPD / รับยา (ชั้น 2)</option>
+                                </optgroup>
+                                <optgroup label="ทางเชื่อมและอาคารโรจนะ">
+                                    <option value="WALKWAY">ทางเชื่อมอาคาร (ชั้น 1)</option>
+                                    <option value="ROJANA_1">ห้องตรวจสอบสิทธิ์ (ตึกโรจนะ ชั้น 1)</option>
+                                    <option value="LIFT_R1">โถงลิฟต์ตึกโรจนะ (ชั้น 1)</option>
+                                    <option value="LIFT_R2">โถงลิฟต์ตึกโรจนะ (ชั้น 2)</option>
+                                    <option value="ROJANA_2">คลินิกผู้สูงอายุ / อาชีวเวชกรรม (ตึกโรจนะ ชั้น 2)</option>
+                                </optgroup>
+                                <optgroup label="อาคารเฉพาะทาง">
+                                    <option value="SRISURIYOTHAI">ตึกศรีสุริโยทัย (สูติ-นรีเวชกรรม)</option>
+                                </optgroup>
+                                <optgroup label="จุดเริ่มต้น / ภายนอก">
+                                    <option value="GATE">ประตูทางเข้าหลัก (เดินทางกลับ)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- กล่องแสดงเสียงพูดปัจจุบัน -->
+                <div id="voiceBanner" class="bg-emerald-900 text-white p-4 rounded-xl shadow-md border-l-8 border-amber-400 transition-all duration-300 space-y-3 relative overflow-hidden">
+                    <div class="flex items-center justify-between relative z-10">
+                        <span class="text-xs text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <span id="speakingIndicator">🗣️ เสียงนำทางอัตโนมัติ</span>
+                        </span>
+                        <button onclick="repeatCurrentVoice()" class="text-xs bg-amber-400 text-emerald-950 font-bold px-2.5 py-1 rounded hover:bg-amber-300 shadow">
+                            🔊 กดฟังซ้ำ
+                        </button>
+                    </div>
+
+                    <p id="liveInstruction" class="text-base md:text-lg font-bold text-white leading-relaxed relative z-10">
+                        กำลังคำนวณเส้นทาง...
+                    </p>
+
+                    <!-- ตัวเลือกเสียงพากย์ -->
+                    <div class="pt-3 border-t border-emerald-700/80 space-y-2.5 text-xs relative z-10">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-emerald-200 font-medium shrink-0">🎙️ เสียงพากย์:</label>
+                            <select id="voiceSelect" onchange="changeVoice()" class="bg-emerald-950 text-white border border-emerald-600 rounded px-2 py-1 text-xs w-full max-w-[200px] outline-none">
+                                <option value="">ระบบกำลังโหลดเสียง...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- มาตรวัดก้าวเดินแบบ Real-time -->
+                <div class="bg-slate-900 text-white p-4 rounded-xl shadow-md space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <span class="text-xs text-slate-400 font-semibold">ระยะทางการเดินช่วงนี้</span>
+                        <span id="sensorStatus" class="text-[10px] sm:text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">พร้อมใช้งาน</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-slate-800 p-2 rounded-lg">
+                            <p class="text-xs text-slate-400">เดินแล้ว</p>
+                            <p class="text-xl font-extrabold text-amber-400"><span id="stepCount">0</span> <span class="text-xs font-normal">ก้าว</span></p>
+                        </div>
+                        <div class="bg-slate-800 p-2 rounded-lg">
+                            <p class="text-xs text-slate-400">ระยะทาง</p>
+                            <p class="text-xl font-extrabold text-emerald-400"><span id="walkedDist">0</span> <span class="text-xs font-normal">ม.</span></p>
+                        </div>
+                        <div class="bg-slate-800 p-2 rounded-lg">
+                            <p class="text-xs text-slate-400">เหลืออีก</p>
+                            <p class="text-xl font-extrabold text-white"><span id="remainDist">0</span> <span class="text-xs font-normal">ม.</span></p>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="w-full bg-slate-700 h-2.5 rounded-full overflow-hidden mt-2">
+                            <div id="progressBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- คอลัมน์ขวา: แผนผัง SVG แยกชั้น -->
+            <div class="lg:col-span-8 xl:col-span-9 flex flex-col">
+                <div class="bg-slate-800 text-white p-3 rounded-t-xl flex justify-between items-center">
+                    <span class="font-bold text-sm">🗺️ แผนผัง รพ. แบบแยกชั้น (Floor Plan View)</span>
+                </div>
+
+                <div class="bg-slate-200 border-x border-b border-slate-300 rounded-b-xl p-3 flex-1 flex items-center justify-center overflow-auto">
+                    <!-- SVG Canvas กว้างขึ้นและแบ่งโซนบน-ล่างชัดเจน -->
+                    <svg id="hospitalMap" viewBox="0 0 800 600" class="w-full h-auto min-w-[600px] max-w-[900px] bg-white rounded-lg shadow-inner border border-slate-300">
+                        
+                        <!-- ================= โซนชั้น 1 (ครึ่งบน) ================= -->
+                        <rect x="10" y="10" width="780" height="270" fill="#f8fafc" rx="8" stroke="#cbd5e1" stroke-dasharray="4"/>
+                        <text x="25" y="35" fill="#475569" font-size="16" font-weight="bold">📍 แผนผังบริเวณ ชั้น 1 (ระดับพื้นดิน)</text>
+                        
+                        <!-- ถนนอู่ทอง -->
+                        <rect x="25" y="220" width="140" height="40" fill="#cbd5e1" rx="4"/>
+                        <text x="95" y="245" text-anchor="middle" fill="#334155" font-size="12" font-weight="bold">ถนนอู่ทอง</text>
+
+                        <!-- ตึกเฉลิมพระเกียรติ ชั้น 1 -->
+                        <rect x="50" y="70" width="180" height="120" fill="#ecfdf5" stroke="#059669" stroke-width="2" rx="8"/>
+                        <text x="140" y="90" text-anchor="middle" fill="#065f46" font-size="12" font-weight="bold">อาคารเฉลิมพระเกียรติฯ ชั้น 1</text>
+                        <rect x="65" y="140" width="100" height="40" fill="#ffffff" stroke="#10b981" rx="4"/>
+                        <text x="115" y="165" text-anchor="middle" fill="#0f766e" font-size="11">จุดคัดกรอง</text>
+
+                        <!-- ทางเชื่อมชั้น 1 -->
+                        <rect x="230" y="140" width="120" height="30" fill="#fef3c7" stroke="#f59e0b" stroke-dasharray="3"/>
+                        <text x="290" y="159" text-anchor="middle" fill="#92400e" font-size="11" font-weight="bold">ทางเดินเชื่อมอาคาร</text>
+
+                        <!-- ตึกโรจนะ ชั้น 1 -->
+                        <rect x="350" y="70" width="200" height="120" fill="#eff6ff" stroke="#2563eb" stroke-width="2" rx="8"/>
+                        <text x="450" y="90" text-anchor="middle" fill="#1e40af" font-size="12" font-weight="bold">อาคารตึกโรจนะ ชั้น 1</text>
+                        <rect x="370" y="140" width="120" height="40" fill="#ffffff" stroke="#3b82f6" rx="4"/>
+                        <text x="430" y="165" text-anchor="middle" fill="#1e3a8a" font-size="11">ห้องตรวจสอบสิทธิ์</text>
+
+                        <!-- ตึกศรีสุริโยทัย ชั้น 1 -->
+                        <rect x="580" y="120" width="190" height="70" fill="#fdf2f8" stroke="#db2777" stroke-width="2" rx="8"/>
+                        <text x="675" y="150" text-anchor="middle" fill="#9d174d" font-size="12" font-weight="bold">ตึกศรีสุริโยทัย</text>
+                        <text x="675" y="168" text-anchor="middle" fill="#9d174d" font-size="11">แผนกสูติ-นรีเวชกรรม</text>
+
+
+                        <!-- ================= เส้นแบ่งชั้น ================= -->
+                        <line x1="10" y1="300" x2="790" y2="300" stroke="#94a3b8" stroke-width="3" stroke-dasharray="10,5" stroke-linecap="round"/>
+                        <rect x="330" y="285" width="140" height="30" fill="#94a3b8" rx="15"/>
+                        <text x="400" y="305" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="bold">เปลี่ยนชั้นอาคาร ↕</text>
+
+
+                        <!-- ================= โซนชั้น 2 (ครึ่งล่าง) ================= -->
+                        <rect x="10" y="330" width="780" height="250" fill="#f0fdf4" rx="8" stroke="#cbd5e1" stroke-dasharray="4"/>
+                        <text x="25" y="355" fill="#475569" font-size="16" font-weight="bold">📍 แผนผังบริเวณ ชั้น 2</text>
+
+                        <!-- ตึกเฉลิมพระเกียรติ ชั้น 2 -->
+                        <rect x="50" y="400" width="180" height="130" fill="#d1fae5" stroke="#10b981" stroke-width="2" rx="8"/>
+                        <text x="140" y="420" text-anchor="middle" fill="#047857" font-size="12" font-weight="bold">อาคารเฉลิมพระเกียรติฯ ชั้น 2</text>
+                        <rect x="65" y="470" width="100" height="40" fill="#ffffff" stroke="#10b981" rx="4"/>
+                        <text x="115" y="495" text-anchor="middle" fill="#0f766e" font-size="11">ห้องตรวจ OPD / ยา</text>
+
+                        <!-- ตึกโรจนะ ชั้น 2 -->
+                        <rect x="350" y="400" width="200" height="130" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="8"/>
+                        <text x="450" y="420" text-anchor="middle" fill="#1d4ed8" font-size="12" font-weight="bold">อาคารตึกโรจนะ ชั้น 2</text>
+                        <rect x="370" y="470" width="120" height="40" fill="#ffffff" stroke="#3b82f6" rx="4"/>
+                        <text x="430" y="495" text-anchor="middle" fill="#1e3a8a" font-size="11">คลินิกผู้สูงอายุ</text>
+
+
+                        <!-- ================= ช่องลิฟต์จำลอง (เชื่อมชั้น 1 ไป 2) ================= -->
+                        <!-- ลิฟต์เฉลิมพระเกียรติ -->
+                        <rect x="180" y="100" width="40" height="40" fill="#e2e8f0" stroke="#64748b" rx="4"/>
+                        <text x="200" y="125" text-anchor="middle" fill="#334155" font-size="10" font-weight="bold">ลิฟต์</text>
+                        <rect x="180" y="430" width="40" height="40" fill="#e2e8f0" stroke="#64748b" rx="4"/>
+                        <text x="200" y="455" text-anchor="middle" fill="#334155" font-size="10" font-weight="bold">ลิฟต์</text>
+                        <line x1="200" y1="140" x2="200" y2="430" stroke="#94a3b8" stroke-width="3" stroke-dasharray="6,4" />
+
+                        <!-- ลิฟต์โรจนะ -->
+                        <rect x="500" y="100" width="40" height="40" fill="#e2e8f0" stroke="#64748b" rx="4"/>
+                        <text x="520" y="125" text-anchor="middle" fill="#334155" font-size="10" font-weight="bold">ลิฟต์</text>
+                        <rect x="500" y="430" width="40" height="40" fill="#e2e8f0" stroke="#64748b" rx="4"/>
+                        <text x="520" y="455" text-anchor="middle" fill="#334155" font-size="10" font-weight="bold">ลิฟต์</text>
+                        <line x1="520" y1="140" x2="520" y2="430" stroke="#94a3b8" stroke-width="3" stroke-dasharray="6,4" />
+
+
+                        <!-- ================= เลเยอร์วาดเส้นทาง ================= -->
+                        <polyline id="svgRouteLine" points="" fill="none" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <polyline id="svgWalkedLine" points="" fill="none" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <g id="mapNodes"></g>
+
+                        <!-- หมุดผู้ป่วย -->
+                        <g id="userMarkerGroup">
+                            <circle id="userPulse" cx="95" cy="220" r="10" fill="#f43f5e" class="pulse-marker"/>
+                            <circle id="userDot" cx="95" cy="220" r="7" fill="#e11d48" stroke="#ffffff" stroke-width="2.5"/>
+                            <rect id="userLabelBg" x="65" y="185" width="60" height="20" rx="4" fill="#e11d48"/>
+                            <text id="userLabel" x="95" y="199" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">คุณอยู่ที่นี่</text>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- กล่องจำลองการสแกน QR Code (Modal Popup) -->
+        <div id="qrModal" class="hidden absolute inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 rounded-2xl backdrop-blur-sm">
+            <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border-4 border-indigo-500 relative transform transition-all scale-100">
+                <div class="absolute -top-5 left-1/2 -translate-x-1/2 bg-indigo-500 text-white w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-lg border-2 border-white">📷</div>
+                <h3 class="font-bold text-lg mb-1 text-slate-800 text-center mt-3">สแกนป้าย QR ระบุพิกัด</h3>
+                <p class="text-xs text-slate-500 mb-5 text-center leading-relaxed">สแกนป้ายระหว่างทางเพื่อดึงหมุดให้ตรงกับตำแหน่งจริงทันที</p>
+                
+                <label class="block text-slate-700 font-bold mb-2 text-sm">จำลองการสแกนป้ายที่จุด:</label>
+                <select id="qrNodeSelect" class="w-full p-3 border-2 border-indigo-200 rounded-lg mb-5 bg-indigo-50/30 text-indigo-900 font-semibold text-sm outline-none focus:border-indigo-500">
+                    <option value="LIFT_C1">📍 โถงลิฟต์ชั้น 1 (ตึกเฉลิมพระเกียรติ)</option>
+                    <option value="WALKWAY">📍 ทางเดินเชื่อมอาคาร ชั้น 1</option>
+                    <option value="ROJANA_1">📍 ห้องตรวจสอบสิทธิ์ (ตึกโรจนะ ชั้น 1)</option>
+                    <option value="LIFT_R1">📍 โถงลิฟต์ชั้น 1 (ตึกโรจนะ)</option>
+                    <option value="CHALERM_2">📍 ห้องตรวจ OPD (ตึกเฉลิมพระเกียรติ ชั้น 2)</option>
+                </select>
+                
+                <div class="flex gap-2">
+                    <button onclick="processQRScan()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-bold text-sm shadow-md transition">ยืนยันการสแกน</button>
+                    <button onclick="closeQRModal()" class="w-1/3 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2.5 rounded-lg font-bold text-sm transition">ปิด</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const STEP_LENGTH_METERS = 0.65;
+        let currentSteps = 0;
+        let walkedMeters = 0;
+        let totalRouteMeters = 0;
+        let activeRouteSegments = [];
+
+        let voiceEnabled = true;
+        let speechRate = 0.88; 
+        let availableThaiVoices = [];
+        let selectedThaiVoice = null;
+        let lastSpokenMessage = "";
+        let currentVoiceText = "";
+        let speechDebounceTimer = null;
+        let audioCtx = null;
+
+        // เสียงกระดิ่งนุ่มๆ
+        function playSoftChime(callback) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, now); 
+                osc.frequency.setValueAtTime(880, now + 0.12); 
+
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.35);
+                setTimeout(callback, 280);
+            } catch (e) {
+                callback();
+            }
+        }
+
+        // โหลดรายชื่อเสียงภาษาไทยทั้งหมด
+        function populateVoices() {
+            if (!('speechSynthesis' in window)) return;
+            const allVoices = window.speechSynthesis.getVoices();
+            availableThaiVoices = allVoices.filter(v => v.lang.toLowerCase().includes('th'));
+
+            const selectEl = document.getElementById("voiceSelect");
+            if (availableThaiVoices.length === 0) {
+                selectEl.innerHTML = `<option value="">ใช้เสียงเริ่มต้นของระบบ</option>`;
+                return;
+            }
+
+            availableThaiVoices.sort((a, b) => {
+                const score = (v) => {
+                    if (v.name.includes('Premwadee')) return 4;
+                    if (v.name.includes('Natural')) return 3;
+                    if (v.name.includes('Google')) return 2;
+                    if (v.name.includes('Kanya')) return 1;
+                    return 0;
+                };
+                return score(b) - score(a);
+            });
+
+            selectEl.innerHTML = availableThaiVoices.map((v, idx) => 
+                `<option value="${idx}">${v.name.replace('Microsoft ', '').replace('Online (Natural)', '✨ ธรรมชาติ')}</option>`
+            ).join('');
+
+            selectedThaiVoice = availableThaiVoices[0];
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = populateVoices;
+            populateVoices();
+        }
+
+        function changeVoice() {
+            const idx = document.getElementById("voiceSelect").value;
+            if (idx !== "" && availableThaiVoices[idx]) {
+                selectedThaiVoice = availableThaiVoices[idx];
+                repeatCurrentVoice();
+            }
+        }
+
+        // พิกัด (x, y) อ้างอิงจากแผนผังแบบแยกชั้น
+        const nodes = {
+            // โซนชั้น 1
+            GATE: { name: "ประตูทางเข้าหลัก", speechName: "ประตูทางเข้าหลัก", x: 95, y: 220 },
+            CHALERM_1: { name: "จุดคัดกรอง ชั้น 1 (ตึกเฉลิมพระเกียรติฯ)", speechName: "จุดคัดกรอง ชั้นหนึ่ง อาคารเฉลิมพระเกียรติ", x: 115, y: 160 },
+            LIFT_C1: { name: "หน้าลิฟต์ ชั้น 1 (ตึกเฉลิมพระเกียรติฯ)", speechName: "โถงลิฟต์ชั้นหนึ่ง อาคารเฉลิมพระเกียรติ", x: 200, y: 120 },
+            WALKWAY: { name: "ทางเดินเชื่อมอาคาร ชั้น 1", speechName: "ทางเดินเชื่อมอาคาร ชั้นหนึ่ง", x: 290, y: 155 },
+            ROJANA_1: { name: "ห้องตรวจสอบสิทธิ์ ชั้น 1 (ตึกโรจนะ)", speechName: "ห้องตรวจสอบสิทธิ์ ชั้นหนึ่ง อาคารโรจนะ", x: 430, y: 160 },
+            LIFT_R1: { name: "หน้าลิฟต์ ชั้น 1 (ตึกโรจนะ)", speechName: "โถงลิฟต์ชั้นหนึ่ง อาคารโรจนะ", x: 520, y: 120 },
+            SRISURIYOTHAI: { name: "ตึกศรีสุริโยทัย แผนกสูติ-นรีเวช", speechName: "ตึกศรีสุริโยทัย แผนกสูตินรีเวช", x: 675, y: 155 },
+            
+            // โซนชั้น 2
+            LIFT_C2: { name: "หน้าลิฟต์ ชั้น 2 (ตึกเฉลิมพระเกียรติฯ)", speechName: "โถงลิฟต์ชั้นสอง อาคารเฉลิมพระเกียรติ", x: 200, y: 450 },
+            CHALERM_2: { name: "ห้องตรวจ OPD ชั้น 2 (ตึกเฉลิมพระเกียรติฯ)", speechName: "ห้องตรวจผู้ป่วยนอก และห้องรับยา ชั้นสอง", x: 115, y: 490 },
+            LIFT_R2: { name: "หน้าลิฟต์ ชั้น 2 (ตึกโรจนะ)", speechName: "โถงลิฟต์ชั้นสอง อาคารโรจนะ", x: 520, y: 450 },
+            ROJANA_2: { name: "คลินิกผู้สูงอายุ ชั้น 2 (ตึกโรจนะ)", speechName: "คลินิกผู้สูงอายุ และอาชีวเวชกรรม ชั้นสอง", x: 430, y: 490 }
+        };
+
+        // เส้นทางการเชื่อมต่อและคำอ่าน (Edges)
+        const edges = [
+            // ชั้น 1
+            { from: "GATE", to: "CHALERM_1", dist: 25, display: "จากประตูทางเข้า เดินเข้าโถงคัดกรอง", speech: "จากประตูทางเข้าหลัก, เชิญเดินตรงเข้าสู่จุดคัดกรอง ชั้นหนึ่ง, อาคารเฉลิมพระเกียรติค่ะ" },
+            { from: "CHALERM_1", to: "LIFT_C1", dist: 15, display: "เดินไปโถงลิฟต์ชั้น 1 (ตึกเฉลิมพระเกียรติฯ)", speech: "จากจุดคัดกรอง, เชิญเดินไปที่โถงลิฟต์ชั้นหนึ่งค่ะ" },
+            { from: "CHALERM_1", to: "WALKWAY", dist: 25, display: "เดินออกทางเชื่อมอาคาร ด้านข้างตึก", speech: "จากจุดคัดกรอง, เชิญเดินออกไปยังทางเชื่อมอาคาร ด้านข้างตึกค่ะ" },
+            { from: "WALKWAY", to: "ROJANA_1", dist: 25, display: "เดินตามทางเชื่อม เข้าสู่ห้องตรวจสอบสิทธิ์", speech: "เดินตามทางเชื่อม เข้าสู่ห้องตรวจสอบสิทธิ์ ชั้นหนึ่ง อาคารโรจนะค่ะ" },
+            { from: "ROJANA_1", to: "LIFT_R1", dist: 15, display: "เดินไปยังโถงลิฟต์ตึกโรจนะ", speech: "จากห้องตรวจสอบสิทธิ์, เชิญเดินไปที่โถงลิฟต์ตึกโรจนะค่ะ" },
+            { from: "WALKWAY", to: "SRISURIYOTHAI", dist: 45, display: "เดินตามป้าย ไปตึกศรีสุริโยทัย", speech: "จากทางเชื่อม, เชิญเดินตามป้ายมุ่งหน้าไปตึกศรีสุริโยทัย แผนกสูตินรีเวชค่ะ" },
+            
+            // ข้ามชั้น (ลิฟต์)
+            { from: "LIFT_C1", to: "LIFT_C2", dist: 10, display: "ขึ้นลิฟต์ไปที่ชั้น 2", speech: "ถึงหน้าลิฟต์แล้วค่ะ, กรุณาเข้าลิฟต์และกดไปที่ชั้นสองค่ะ" },
+            { from: "LIFT_R1", to: "LIFT_R2", dist: 10, display: "ขึ้นลิฟต์ไปที่ชั้น 2", speech: "ถึงหน้าลิฟต์แล้วค่ะ, กรุณาเข้าลิฟต์และกดไปที่ชั้นสอง อาคารโรจนะค่ะ" },
+
+            // ชั้น 2
+            { from: "LIFT_C2", to: "CHALERM_2", dist: 15, display: "เดินเข้าสู่โซนห้องตรวจ OPD", speech: "ออกจากลิฟต์ชั้นสองแล้ว, เชิญเดินเข้าสู่โซนห้องตรวจผู้ป่วยนอก และห้องรับยาค่ะ" },
+            { from: "LIFT_R2", to: "ROJANA_2", dist: 15, display: "เข้าสู่คลินิกผู้สูงอายุ", speech: "ออกจากลิฟต์ชั้นสองแล้ว, เชิญเดินเข้าสู่คลินิกผู้สูงอายุค่ะ" }
+        ];
+
+        function speakThai(speechText, forceRepeat = false) {
+            if (!voiceEnabled || !speechText) return;
+            if (!forceRepeat && speechText === lastSpokenMessage) return;
+
+            lastSpokenMessage = speechText;
+            if (!('speechSynthesis' in window)) return;
+
+            if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
+
+            speechDebounceTimer = setTimeout(() => {
+                window.speechSynthesis.cancel();
+                playSoftChime(() => {
+                    if (!voiceEnabled) return;
+                    const banner = document.getElementById("voiceBanner");
+                    const indicator = document.getElementById("speakingIndicator");
+
+                    const utterance = new SpeechSynthesisUtterance(speechText);
+                    utterance.lang = 'th-TH';
+                    if (selectedThaiVoice) utterance.voice = selectedThaiVoice;
+                    utterance.rate = speechRate; 
+
+                    utterance.onstart = () => {
+                        banner.classList.add("speaking-glow");
+                        indicator.textContent = "🔊 กำลังพูดนำทาง...";
+                    };
+                    utterance.onend = utterance.onerror = () => {
+                        banner.classList.remove("speaking-glow");
+                        indicator.textContent = "🗣️ เสียงนำทางอัตโนมัติ";
+                    };
+
+                    window.speechSynthesis.speak(utterance);
+                });
+            }, 100);
+        }
+
+        function repeatCurrentVoice() { if (currentVoiceText) speakThai(currentVoiceText, true); }
+
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            const btn = document.getElementById("voiceToggleBtn");
+            const icon = document.getElementById("voiceIcon");
+            const txt = document.getElementById("voiceStatusText");
+
+            if (voiceEnabled) {
+                btn.className = "bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-3.5 py-2 rounded-lg text-xs md:text-sm transition shadow flex items-center gap-1.5";
+                icon.textContent = "🔊"; txt.textContent = "เปิดเสียงอยู่";
+                repeatCurrentVoice();
+            } else {
+                window.speechSynthesis.cancel();
+                if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
+                btn.className = "bg-slate-600 hover:bg-slate-500 text-slate-200 font-bold px-3.5 py-2 rounded-lg text-xs md:text-sm transition shadow flex items-center gap-1.5";
+                icon.textContent = "🔇"; txt.textContent = "ปิดเสียงอยู่";
+            }
+        }
+
+        // ==========================================
+        // ระบบคำนวณเส้นทางแบบเลือกจุดเอง
+        // ==========================================
+        function loadCustomRoute() {
+            const start = document.getElementById("startNode").value;
+            const end = document.getElementById("endNode").value;
+            buildRoute(start, end);
+            lastSpokenMessage = "";
+            resetWalk();
+        }
+
+        function buildRoute(start, end) {
+            if (start === end) {
+                activeRouteSegments = [];
+                totalRouteMeters = 0;
+                document.getElementById("svgRouteLine").setAttribute("points", `${nodes[start].x},${nodes[start].y}`);
+                document.getElementById("mapNodes").innerHTML = `<circle cx="${nodes[start].x}" cy="${nodes[start].y}" r="8" fill="#10b981" stroke="#fff" stroke-width="2"/>`;
+                return;
+            }
+
+            const graph = {};
+            Object.keys(nodes).forEach(k => graph[k] = []);
+            edges.forEach(e => {
+                graph[e.from].push({ to: e.to, dist: e.dist, display: e.display, speech: e.speech });
+                let revDisplay = `เดินย้อนกลับไปยัง ${nodes[e.from].name}`;
+                let revSpeech = `เชิญเดินย้อนกลับไปยัง, ${nodes[e.from].speechName} ค่ะ`;
+                if (e.from.includes("LIFT") && e.to.includes("LIFT")) {
+                    revDisplay = `ลงลิฟต์ไปยัง ${nodes[e.from].name}`;
+                    revSpeech = `กรุณาเข้าลิฟต์, และกดลงไปยัง ${nodes[e.from].speechName} ค่ะ`;
+                }
+                graph[e.to].push({ to: e.from, dist: e.dist, display: revDisplay, speech: revSpeech });
+            });
+
+            const dist = {}, prev = {}, displayMap = {}, speechMap = {}, distMap = {};
+            const q = new Set(Object.keys(nodes));
+            Object.keys(nodes).forEach(k => dist[k] = Infinity);
+            dist[start] = 0;
+
+            while (q.size > 0) {
+                let u = null;
+                q.forEach(n => { if (u === null || dist[n] < dist[u]) u = n; });
+                if (dist[u] === Infinity || u === end) break;
+                q.delete(u);
+
+                graph[u].forEach(nb => {
+                    if (q.has(nb.to)) {
+                        const alt = dist[u] + nb.dist;
+                        if (alt < dist[nb.to]) {
+                            dist[nb.to] = alt;
+                            prev[nb.to] = u;
+                            displayMap[nb.to] = nb.display;
+                            speechMap[nb.to] = nb.speech;
+                            distMap[nb.to] = nb.dist;
+                        }
+                    }
+                });
+            }
+
+            const nodeList = [];
+            let curr = end;
+            while (curr) {
+                nodeList.unshift(curr);
+                curr = prev[curr];
+            }
+
+            activeRouteSegments = [];
+            totalRouteMeters = 0;
+            for (let i = 0; i < nodeList.length - 1; i++) {
+                const a = nodeList[i], b = nodeList[i + 1];
+                const segDist = distMap[b];
+                activeRouteSegments.push({
+                    from: a, to: b, startMeter: totalRouteMeters, endMeter: totalRouteMeters + segDist,
+                    dist: segDist, display: displayMap[b], speech: speechMap[b]
+                });
+                totalRouteMeters += segDist;
+            }
+
+            const pts = nodeList.map(k => `${nodes[k].x},${nodes[k].y}`).join(" ");
+            document.getElementById("svgRouteLine").setAttribute("points", pts);
+
+            let circles = "";
+            Object.keys(nodes).forEach(k => {
+                const n = nodes[k];
+                const isEnd = k === end;
+                circles += `<circle cx="${n.x}" cy="${n.y}" r="${isEnd ? 8 : 4}" fill="${isEnd ? '#10b981' : '#94a3b8'}" stroke="#fff" stroke-width="1.5"/>`;
+            });
+            document.getElementById("mapNodes").innerHTML = circles;
+        }
+
+        function resetWalk() {
+            currentSteps = 0;
+            walkedMeters = 0;
+            lastSpokenMessage = "";
+            updatePositionUI();
+        }
+
+        function simulateSteps(stepsToAdd) {
+            currentSteps += stepsToAdd;
+            walkedMeters = Math.min(totalRouteMeters, Math.round(currentSteps * STEP_LENGTH_METERS));
+            updatePositionUI();
+        }
+
+        function updatePositionUI() {
+            document.getElementById("stepCount").textContent = currentSteps;
+            document.getElementById("walkedDist").textContent = walkedMeters;
+            document.getElementById("remainDist").textContent = Math.max(0, totalRouteMeters - walkedMeters);
+
+            const pct = totalRouteMeters > 0 ? Math.min(100, Math.round((walkedMeters / totalRouteMeters) * 100)) : 100;
+            document.getElementById("progressBar").style.width = `${pct}%`;
+
+            if (activeRouteSegments.length === 0) {
+                const endNodeId = document.getElementById("endNode").value;
+                const activeSpeech = `ขณะนี้คุณอยู่ที่, ${nodes[endNodeId].speechName}, เรียบร้อยแล้วค่ะ`;
+                currentVoiceText = activeSpeech;
+                document.getElementById("liveInstruction").textContent = `🎉 คุณอยู่ที่ ${nodes[endNodeId].name} แล้ว`;
+                speakThai(activeSpeech, false);
+                setMarkerPosition(nodes[endNodeId].x, nodes[endNodeId].y);
+                document.getElementById("svgWalkedLine").setAttribute("points", `${nodes[endNodeId].x},${nodes[endNodeId].y}`);
+                return;
+            }
+
+            let curX = nodes[activeRouteSegments[0].from].x;
+            let curY = nodes[activeRouteSegments[0].from].y;
+            let activeDisplay = activeRouteSegments[0].display;
+            let activeSpeech = activeRouteSegments[0].speech;
+            const walkedPoints = [`${curX},${curY}`];
+
+            for (const seg of activeRouteSegments) {
+                const nFrom = nodes[seg.from];
+                const nTo = nodes[seg.to];
+
+                if (walkedMeters >= seg.endMeter) {
+                    curX = nTo.x; curY = nTo.y;
+                    walkedPoints.push(`${curX},${curY}`);
+                } else if (walkedMeters >= seg.startMeter) {
+                    const ratio = (walkedMeters - seg.startMeter) / seg.dist;
+                    curX = nFrom.x + (nTo.x - nFrom.x) * ratio;
+                    curY = nFrom.y + (nTo.y - nFrom.y) * ratio;
+                    walkedPoints.push(`${curX},${curY}`);
+                    activeDisplay = seg.display;
+                    activeSpeech = seg.speech;
+                    break;
+                }
+            }
+
+            if (walkedMeters >= totalRouteMeters) {
+                const lastNode = nodes[activeRouteSegments[activeRouteSegments.length - 1].to];
+                activeDisplay = `🎉 เดินทางถึงจุดหมาย: ${lastNode.name}`;
+                activeSpeech = `เดินทางถึงจุดหมายแล้วค่ะ, ขณะนี้คุณอยู่ที่, ${lastNode.speechName}, เรียบร้อยแล้วค่ะ`;
+            }
+
+            currentVoiceText = activeSpeech;
+            document.getElementById("liveInstruction").textContent = activeDisplay;
+            document.getElementById("svgWalkedLine").setAttribute("points", walkedPoints.join(" "));
+            
+            speakThai(activeSpeech, false);
+            setMarkerPosition(curX, curY);
+        }
+
+        function setMarkerPosition(x, y) {
+            document.getElementById("userPulse").setAttribute("cx", x);
+            document.getElementById("userPulse").setAttribute("cy", y);
+            document.getElementById("userDot").setAttribute("cx", x);
+            document.getElementById("userDot").setAttribute("cy", y);
+            document.getElementById("userLabelBg").setAttribute("x", x - 35);
+            document.getElementById("userLabelBg").setAttribute("y", y - 35);
+            document.getElementById("userLabel").setAttribute("x", x);
+            document.getElementById("userLabel").setAttribute("y", y - 21);
+        }
+
+        // ==========================================
+        // ระบบจำลองการสแกน QR Code (Check-in System)
+        // ==========================================
+        function openQRModal() {
+            document.getElementById('qrModal').classList.remove('hidden');
+        }
+
+        function closeQRModal() {
+            document.getElementById('qrModal').classList.add('hidden');
+        }
+
+        function processQRScan() {
+            const scannedNodeId = document.getElementById('qrNodeSelect').value;
+            closeQRModal();
+
+            document.getElementById('startNode').value = scannedNodeId;
+            const currentDestId = document.getElementById('endNode').value;
+
+            if (scannedNodeId === currentDestId) {
+                speakThai(`อัปเดตตำแหน่งสำเร็จค่ะ, ยินดีต้อนรับสู่ ${nodes[scannedNodeId].speechName} ค่ะ`, true);
+                loadCustomRoute();
+                walkedMeters = totalRouteMeters; 
+                updatePositionUI();
+            } else {
+                speakThai(`อัปเดตตำแหน่งสำเร็จค่ะ, ขณะนี้คุณอยู่ที่ ${nodes[scannedNodeId].speechName}, ระบบกำลังคำนวณเส้นทางใหม่ค่ะ`, true);
+                loadCustomRoute(); 
+            }
+        }
+
+        // เซนเซอร์ก้าวเดิน
+        let lastStepTime = 0;
+        function enableMotionSensor() {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(permissionState => {
+                    if (permissionState === 'granted') startListeningMotion();
+                    else alert("ไม่ได้รับอนุญาตให้เข้าถึงเซนเซอร์การเคลื่อนไหว");
+                }).catch(console.error);
+            } else if ('DeviceMotionEvent' in window) {
+                startListeningMotion();
+            } else {
+                alert("อุปกรณ์นี้ไม่รองรับเซนเซอร์ตรวจจับการเดิน กรุณาใช้ปุ่ม 'จำลองเดิน' แทนครับ");
+            }
+        }
+
+        function startListeningMotion() {
+            const statusEl = document.getElementById("sensorStatus");
+            statusEl.textContent = "🟢 กำลังจับก้าวเดิน";
+            statusEl.className = "text-[10px] sm:text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full";
+            speakThai("เปิดระบบตรวจจับการเดิน และเสียงนำทางแล้วค่ะ, เชิญก้าวเดินตามเส้นทางได้เลยค่ะ", true);
+
+            window.addEventListener('devicemotion', (event) => {
+                const acc = event.accelerationIncludingGravity;
+                if (!acc) return;
+                const magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+                const now = Date.now();
+                if (magnitude > 12.5 && (now - lastStepTime > 350)) {
+                    lastStepTime = now;
+                    simulateSteps(1);
+                }
+            });
+        }
+
+        // โหลดข้อมูลอัตโนมัติเมื่อเปิดเว็บ
+        window.onload = () => {
+            populateVoices();
+            // หน่วงเวลาเล็กน้อยเพื่อให้ตัวแปรทั้งหมดพร้อมก่อนวาดเส้นทาง
+            setTimeout(() => {
+                loadCustomRoute();
+            }, 300);
+        };
+
+    </script>
+</body>
+</html>
